@@ -1,0 +1,69 @@
+name: StorageManager
+options:
+  bundleIdPrefix: com.yourco
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    SWIFT_STRICT_CONCURRENCY: complete
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  StorageManager:
+    type: application
+    platform: iOS
+    sources:
+      - path: StorageManager
+        excludes:
+          - "Config/*.xcconfig"
+    configFiles:
+      Debug: StorageManager/Config/App.xcconfig
+      Release: StorageManager/Config/App.xcconfig
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID)
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        CODE_SIGN_ENTITLEMENTS: StorageManager/Resources/StorageManager.entitlements
+    info:
+      path: StorageManager/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Storage Manager
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIBackgroundModes: [remote-notification, processing, audio]
+        BGTaskSchedulerPermittedIdentifiers: [$(APP_BUNDLE_ID).move]
+        NSPhotoLibraryUsageDescription: Storage Manager scans your videos to show what uses space, moves the ones you choose to your own cloud, and restores them back to Photos.
+        NSPhotoLibraryAddUsageDescription: Storage Manager saves restored videos back to your Photos library.
+        ITSAppUsesNonExemptEncryption: false
+        SMGoogleClientID: $(GOOGLE_CLIENT_ID)
+        SMMicrosoftClientID: $(MICROSOFT_CLIENT_ID)
+        SMCloudKitContainer: $(CLOUDKIT_CONTAINER)
+    entitlements:
+      path: StorageManager/Resources/StorageManager.entitlements
+      properties:
+        aps-environment: development
+        com.apple.developer.icloud-services: [CloudKit]
+        com.apple.developer.icloud-container-identifiers: [$(CLOUDKIT_CONTAINER)]
+  StorageManagerTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [StorageManagerTests]
+    dependencies:
+      - target: StorageManager
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  StorageManager:
+    build:
+      targets:
+        StorageManager: all
+        StorageManagerTests: [test]
+    test:
+      targets: [StorageManagerTests]
