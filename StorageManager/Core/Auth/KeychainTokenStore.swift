@@ -9,9 +9,12 @@ import Security
 /// transfers keep working while the phone is locked.
 nonisolated struct KeychainTokenStore: Sendable {
     let service: String
+    /// Shared with the Files extension. Empty means the app's default group (e.g. unsigned test builds).
+    let accessGroup: String
 
-    init(service: String = "\(AppConfig.bundleID).oauth") {
+    init(service: String = "\(AppConfig.bundleID).oauth", accessGroup: String = AppConfig.keychainAccessGroup) {
         self.service = service
+        self.accessGroup = accessGroup
     }
 
     func save(_ tokens: TokenSet, for account: AccountKey) throws {
@@ -46,12 +49,16 @@ nonisolated struct KeychainTokenStore: Sendable {
     }
 
     private func baseQuery(for account: AccountKey) -> [String: Any] {
-        [
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account.description,
             kSecAttrSynchronizable as String: kCFBooleanFalse as Any,
         ]
+        if !accessGroup.isEmpty, !accessGroup.hasPrefix("$(") {
+            query[kSecAttrAccessGroup as String] = accessGroup
+        }
+        return query
     }
 }
 

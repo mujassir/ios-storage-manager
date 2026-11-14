@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// User preferences, persisted in UserDefaults (per device; these are not synced).
+/// User preferences, persisted in the App Group defaults so extensions see them too (per device; not synced).
 @Observable
 final class AppSettings {
     @ObservationIgnored private let defaults: UserDefaults
@@ -18,7 +18,7 @@ final class AppSettings {
         static let useAI = "settings.useAppleIntelligence"
     }
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = SharedContainer.defaults) {
         self.defaults = defaults
         defaults.register(defaults: [
             NetworkPolicy.wifiOnlyKey: true,
@@ -31,20 +31,5 @@ final class AppSettings {
         pauseOnLowPower = defaults.bool(forKey: TransferThrottle.pauseOnLowPowerKey)
         deleteAfterMove = defaults.bool(forKey: Keys.deleteAfterMove)
         useAppleIntelligence = defaults.bool(forKey: Keys.useAI)
-    }
-}
-
-/// Pauses uploads between chunks while Low Power Mode is on (if the user wants that).
-enum TransferThrottle {
-    static let pauseOnLowPowerKey = "settings.pauseOnLowPower"
-
-    static var shouldPause: Bool {
-        UserDefaults.standard.bool(forKey: pauseOnLowPowerKey) && ProcessInfo.processInfo.isLowPowerModeEnabled
-    }
-
-    static func waitWhilePaused() async {
-        while shouldPause && !Task.isCancelled {
-            try? await Task.sleep(for: .seconds(5))
-        }
     }
 }

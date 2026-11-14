@@ -32,9 +32,3 @@ final class LinkedAccount {
 
     var lastQuotaFree: Int64 { max(0, lastQuotaTotal - lastQuotaUsed) }
 }
-
-nonisolated struct AccountKey: Hashable, Codable, Sendable, CustomStringConvertible {
-    let provider: ProviderKind
-    let providerUserID: String
-    var description: String { "\(provider.rawValue):\(providerUserID)" }
-}

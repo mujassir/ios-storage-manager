@@ -4,6 +4,9 @@ Goal: **free up iPhone space by moving videos safely to the user's own cloud, an
 
 ## Architecture
 
+> Since Phase 3, code shared with the extensions (models, auth, cloud providers, support) lives in
+> `StorageManager/Core/`; see [PHASE3.md](PHASE3.md).
+
 | Layer | Files | Notes |
 |---|---|---|
 | App & wiring | `App/` | `AppEnvironment` creates the services; SwiftData container with CloudKit (falls back to local) |

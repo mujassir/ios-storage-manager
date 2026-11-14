@@ -12,10 +12,12 @@ struct MoveSheet: View {
     @Environment(AccountManager.self) private var accounts
     @Environment(TransferEngine.self) private var transfers
     @Environment(AppSettings.self) private var settings
+    @Environment(ProStore.self) private var store
     @Query(sort: \LinkedAccount.linkedAt) private var linkedAccounts: [LinkedAccount]
 
     @State private var destination: TransferEngine.Destination = .automatic
     @State private var deleteAfterMove = true
+    @State private var showPaywall = false
 
     private var connected: [LinkedAccount] { linkedAccounts.filter { accounts.isConnected($0) } }
     private var totalBytes: Int64 { videos.reduce(0) { $0 + $1.sizeBytes } }
@@ -37,6 +39,14 @@ struct MoveSheet: View {
                 Section {
                     LabeledContent("Videos", value: "\(videos.count)")
                     LabeledContent("Total size", value: ByteFormatting.string(totalBytes))
+                }
+
+                if !store.canMove(count: videos.count) {
+                    Section {
+                        Label("The free version moves up to \(ProStore.freeBatchLimit) videos at a time. Move the first \(ProStore.freeBatchLimit) now, or get Pro for unlimited moves.", systemImage: "lock")
+                            .font(.footnote)
+                        Button("Get Pro") { showPaywall = true }
+                    }
                 }
 
                 if connected.isEmpty {
@@ -96,7 +106,8 @@ struct MoveSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Move", role: .confirm) {
-                        transfers.start(videos, destination: destination, deleteAfterMove: deleteAfterMove, context: context)
+                        let batch = store.canMove(count: videos.count) ? videos : Array(videos.prefix(ProStore.freeBatchLimit))
+                        transfers.start(batch, destination: destination, deleteAfterMove: deleteAfterMove, context: context)
                         dismiss()
                         onStart()
                     }
@@ -104,6 +115,9 @@ struct MoveSheet: View {
                 }
             }
             .onAppear { deleteAfterMove = settings.deleteAfterMove }
+            .sheet(isPresented: $showPaywall) {
+                ProPaywallView(reason: "Move all \(videos.count) videos in one go.")
+            }
         }
     }
 }

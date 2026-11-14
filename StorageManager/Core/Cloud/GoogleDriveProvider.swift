@@ -181,6 +181,25 @@ final class GoogleDriveProvider: CloudProvider {
         Self.api.appending(path: "files/\(fileID)").appending(queryItems: [URLQueryItem(name: "alt", value: "media")])
     }
 
+    // MARK: Sharing
+
+    func createShareLink(for file: RemoteFile) async throws -> ShareLinkInfo {
+        struct Permission: Decodable { let id: String }
+        struct Link: Decodable { let webViewLink: String? }
+        let permissionURL = Self.api.appending(path: "files/\(file.id)/permissions").appending(queryItems: [URLQueryItem(name: "fields", value: "id")])
+        let permission = try await http.json(Permission.self, for: URLRequest(url: permissionURL, method: "POST", json: ["role": "reader", "type": "anyone"]))
+        let linkURL = Self.api.appending(path: "files/\(file.id)").appending(queryItems: [URLQueryItem(name: "fields", value: "webViewLink")])
+        guard let link = try await http.json(Link.self, for: URLRequest(url: linkURL)).webViewLink, let url = URL(string: link) else {
+            throw CloudProviderError.missingDownloadURL
+        }
+        return ShareLinkInfo(url: url, permissionID: permission.id)
+    }
+
+    func removeShareLink(permissionID: String, for file: RemoteFile) async throws {
+        let url = Self.api.appending(path: "files/\(file.id)/permissions/\(permissionID)")
+        _ = try await http.data(for: URLRequest(url: url, method: "DELETE"), acceptedStatus: [404])
+    }
+
     // MARK: Manifest
 
     func readManifest() async throws -> CatalogManifest? {

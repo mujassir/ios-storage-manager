@@ -16,6 +16,9 @@ struct CloudVideoDetailView: View {
     @State private var player: AVPlayer?
     @State private var loadError: String?
     @State private var showRestoreOptions = false
+    @State private var showShareConfirmation = false
+    @State private var isUpdatingShare = false
+    @State private var shareError: String?
 
     private var account: LinkedAccount? {
         linkedAccounts.first { $0.accountKey == video.accountKey }
@@ -49,6 +52,16 @@ struct CloudVideoDetailView: View {
             }
 
             Section {
+                shareControls
+            } header: {
+                Text("Share")
+            } footer: {
+                Text(video.shareURL == nil
+                     ? "Create a view-only link anyone can open in a browser, without signing in."
+                     : "Anyone with this link can watch and download the video.")
+            }
+
+            Section {
                 restoreButton
             } footer: {
                 Text("Restoring saves the original file back to Photos at its original date and place.")
@@ -58,9 +71,72 @@ struct CloudVideoDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task(id: isConnected) { await loadMedia() }
         .onDisappear { player?.pause() }
+        .confirmationDialog("Create a public link?", isPresented: $showShareConfirmation, titleVisibility: .visible) {
+            Button("Create Link") { Task { await createShareLink() } }
+        } message: {
+            Text("Anyone who has the link will be able to view this video.")
+        }
         .confirmationDialog("Restore to Photos", isPresented: $showRestoreOptions, titleVisibility: .visible) {
             Button("Restore and Keep Cloud Copy") { restore(deleteCloudCopy: false) }
             Button("Restore and Remove from Cloud", role: .destructive) { restore(deleteCloudCopy: true) }
+        }
+    }
+
+    @ViewBuilder
+    private var shareControls: some View {
+        if let url = video.shareURL {
+            ShareLink(item: url, subject: Text(video.displayTitle)) {
+                Label("Share Link", systemImage: "square.and.arrow.up")
+            }
+            Button(role: .destructive) {
+                Task { await removeShareLink() }
+            } label: {
+                Label("Stop Sharing", systemImage: "xmark.circle")
+            }
+            .disabled(isUpdatingShare || !isConnected)
+        } else {
+            Button {
+                showShareConfirmation = true
+            } label: {
+                HStack {
+                    Label("Create Share Link", systemImage: "link")
+                    if isUpdatingShare { Spacer(); ProgressView() }
+                }
+            }
+            .disabled(isUpdatingShare || !isConnected)
+        }
+        if let shareError {
+            Text(shareError).font(.footnote).foregroundStyle(.red)
+        }
+    }
+
+    private func createShareLink() async {
+        guard let provider = accounts.provider(for: video.accountKey) else { return }
+        isUpdatingShare = true
+        shareError = nil
+        defer { isUpdatingShare = false }
+        do {
+            let link = try await provider.createShareLink(for: video.remoteFile)
+            video.shareURLString = link.url.absoluteString
+            video.sharePermissionID = link.permissionID
+            try context.save()
+        } catch {
+            shareError = error.localizedDescription
+        }
+    }
+
+    private func removeShareLink() async {
+        guard let provider = accounts.provider(for: video.accountKey) else { return }
+        isUpdatingShare = true
+        shareError = nil
+        defer { isUpdatingShare = false }
+        do {
+            try await provider.removeShareLink(permissionID: video.sharePermissionID, for: video.remoteFile)
+            video.shareURLString = ""
+            video.sharePermissionID = ""
+            try context.save()
+        } catch {
+            shareError = error.localizedDescription
         }
     }
 

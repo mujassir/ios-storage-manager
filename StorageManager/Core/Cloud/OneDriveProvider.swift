@@ -152,6 +152,22 @@ final class OneDriveProvider: CloudProvider {
         PlayableMedia(asset: AVURLAsset(url: try await downloadURL(for: file)), retainedObjects: [])
     }
 
+    // MARK: Sharing
+
+    func createShareLink(for file: RemoteFile) async throws -> ShareLinkInfo {
+        struct Permission: Decodable { struct Link: Decodable { let webUrl: String }; let id: String; let link: Link }
+        let request = URLRequest(url: Self.graph.appending(path: "me/drive/items/\(file.id)/createLink"), method: "POST",
+                                 json: ["type": "view", "scope": "anonymous"])
+        let permission = try await http.json(Permission.self, for: request)
+        guard let url = URL(string: permission.link.webUrl) else { throw CloudProviderError.missingDownloadURL }
+        return ShareLinkInfo(url: url, permissionID: permission.id)
+    }
+
+    func removeShareLink(permissionID: String, for file: RemoteFile) async throws {
+        let url = Self.graph.appending(path: "me/drive/items/\(file.id)/permissions/\(permissionID)")
+        _ = try await http.data(for: URLRequest(url: url, method: "DELETE"), acceptedStatus: [404])
+    }
+
     // MARK: Manifest
 
     func readManifest() async throws -> CatalogManifest? {

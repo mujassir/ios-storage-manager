@@ -2,6 +2,7 @@
 // Copy Secrets.example.xcconfig to Secrets.xcconfig and fill it in.
 APP_BUNDLE_ID = com.yourco.storagemanager
 CLOUDKIT_CONTAINER = iCloud.$(APP_BUNDLE_ID)
+APP_GROUP_ID = group.$(APP_BUNDLE_ID)
 GOOGLE_CLIENT_ID =
 MICROSOFT_CLIENT_ID =
 

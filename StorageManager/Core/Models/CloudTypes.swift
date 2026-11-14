@@ -31,3 +31,17 @@ nonisolated struct UploadMetadata: Sendable {
     var createdAt: Date?
     var description: String
 }
+
+/// Identifies one connected account: used for the Keychain entry, catalog lookups and provider caching.
+nonisolated struct AccountKey: Hashable, Codable, Sendable, CustomStringConvertible {
+    let provider: ProviderKind
+    let providerUserID: String
+    var description: String { "\(provider.rawValue):\(providerUserID)" }
+}
+
+/// A public "anyone with the link can view" link to one cloud file.
+nonisolated struct ShareLinkInfo: Sendable, Equatable {
+    var url: URL
+    /// The provider permission behind the link, needed to stop sharing.
+    var permissionID: String
+}

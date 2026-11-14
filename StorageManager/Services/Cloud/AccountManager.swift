@@ -29,10 +29,7 @@ final class AccountManager {
     private(set) var quotas: [AccountKey: StorageQuota] = [:]
 
     static func oauthConfiguration(for kind: ProviderKind) throws -> OAuthConfiguration {
-        switch kind {
-        case .googleDrive: try GoogleDriveProvider.oauthConfiguration()
-        case .oneDrive: try OneDriveProvider.oauthConfiguration()
-        }
+        try ProviderFactory.oauthConfiguration(for: kind)
     }
 
     // MARK: Lookup
@@ -55,12 +52,7 @@ final class AccountManager {
     }
 
     private func makeProvider(for key: AccountKey) throws -> CloudProvider {
-        let tokens = AccessTokenSource(account: key, config: try Self.oauthConfiguration(for: key.provider), store: store)
-        let http = AuthorizedHTTPClient(tokens: tokens)
-        switch key.provider {
-        case .googleDrive: return GoogleDriveProvider(account: key, http: http)
-        case .oneDrive: return OneDriveProvider(account: key, http: http)
-        }
+        try ProviderFactory.makeProvider(for: key, store: store)
     }
 
     func quota(for account: LinkedAccount) -> StorageQuota? {
@@ -210,6 +202,7 @@ extension MovedVideo {
         longitude = entry.longitude
         movedAt = entry.movedAt
         deletedFromDevice = true
+        isVerified = true
     }
 
     var manifestEntry: CatalogManifest.Entry {

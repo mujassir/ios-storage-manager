@@ -36,6 +36,7 @@ struct VideoListView: View {
                         VideoRow(video: video, isSelected: selection.contains(video.id))
                             .contentShape(.rect)
                             .onTapGesture { toggle(video) }
+                            .hoverEffect(.highlight)
                     }
                 } header: {
                     Text("\(visibleVideos.count) videos · \(ByteFormatting.string(visibleVideos.reduce(0) { $0 + $1.sizeBytes }))")
@@ -59,6 +60,7 @@ struct VideoListView: View {
                         }
                     }
                     .disabled(visibleVideos.isEmpty)
+                    .keyboardShortcut("a", modifiers: .command)
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -73,6 +75,7 @@ struct VideoListView: View {
                     }
                     .buttonStyle(.glassProminent)
                     .disabled(transfers.isRunning)
+                    .keyboardShortcut("m", modifiers: .command)
                     .padding()
                 }
             }

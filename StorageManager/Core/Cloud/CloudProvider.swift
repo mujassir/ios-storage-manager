@@ -25,6 +25,10 @@ protocol CloudProvider: AnyObject {
     func delete(_ file: RemoteFile) async throws
     func playableMedia(for file: RemoteFile, filename: String) async throws -> PlayableMedia
 
+    /// Creates a view-only link anyone can open, without signing in.
+    func createShareLink(for file: RemoteFile) async throws -> ShareLinkInfo
+    func removeShareLink(permissionID: String, for file: RemoteFile) async throws
+
     func readManifest() async throws -> CatalogManifest?
     func writeManifest(_ manifest: CatalogManifest) async throws
 }

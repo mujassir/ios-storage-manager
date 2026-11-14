@@ -54,16 +54,50 @@ The redirect URI (`com.googleusercontent.apps.1234-abc:/oauthredirect`) is deriv
 4. *API permissions → Microsoft Graph → Delegated*: `Files.ReadWrite.AppFolder`, `User.Read`, `offline_access`.
 5. Copy the *Application (client) ID* into `MICROSOFT_CLIENT_ID` in `Secrets.xcconfig`.
 
-## 6. Run the tests
+## 6. App Group, Keychain sharing, Files and widgets (Phase 3)
+
+The app ships with two extensions: **StorageManagerFiles** (the "Storage Manager" location in the Files app) and
+**StorageManagerWidgets** (Home Screen and Lock Screen widgets). They share data with the app through:
+
+- an **App Group** `group.<APP_BUNDLE_ID>` (`APP_GROUP_ID` in `App.xcconfig`): settings, the library snapshot and thumbnails;
+- a **Keychain access group** `<TeamID>.<APP_BUNDLE_ID>.shared`, so the Files extension can download videos on demand.
+  Tokens are still device-only; they are just readable by the app's own extension.
+
+With automatic signing, Xcode registers the App Group and the extension bundle IDs (`.files`, `.widgets`) for you.
+If it doesn't, add the App Group under *Signing & Capabilities* for all three targets.
+
+To check: run the app once (it registers the Files location), then open **Files › Browse › Storage Manager**.
+
+## 7. Storage Manager Pro (StoreKit)
+
+Create these products in App Store Connect (*your app › Monetization*), replacing the bundle ID with yours:
+
+| Product ID | Type |
+|---|---|
+| `com.yourco.storagemanager.pro.monthly` | Auto-renewable subscription (group "Pro") |
+| `com.yourco.storagemanager.pro.yearly` | Auto-renewable subscription (same group) |
+| `com.yourco.storagemanager.pro.lifetime` | Non-consumable |
+
+For local testing without App Store Connect: *File › New › File › StoreKit Configuration File*, add the same three
+products, then *Product › Scheme › Edit Scheme › Run › Options › StoreKit Configuration*.
+
+Auto-move rules run in a `BGProcessingTask` while charging. To trigger one in the debugger, pause the app and run:
+
+```
+e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"com.yourco.storagemanager.automove"]
+```
+
+## 8. Run the tests
 
 ```bash
 xcodebuild test -scheme StorageManager -destination 'platform=iOS Simulator,name=iPhone 17'
 ```
 
 The unit tests cover the platform-independent logic: QuickXorHash and MD5 checksums, file naming,
-the storage allocator, the manifest merge, search filters, upload-resume parsing and PKCE.
+the storage allocator, the manifest merge, search filters, upload-resume parsing, PKCE, the Files folder tree,
+the shared snapshot, auto-move rules and deep links.
 
-## 7. Trying it end to end
+## 9. Trying it end to end
 
 1. Record a few short videos on the test iPhone.
 2. Launch the app → onboarding → allow Photos access.

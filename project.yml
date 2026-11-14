@@ -10,8 +10,12 @@ settings:
     SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
     SWIFT_APPROACHABLE_CONCURRENCY: YES
     SWIFT_STRICT_CONCURRENCY: complete
-    MARKETING_VERSION: "0.1.0"
+    MARKETING_VERSION: "0.3.0"
     CURRENT_PROJECT_VERSION: "1"
+configFiles:
+  Debug: StorageManager/Config/App.xcconfig
+  Release: StorageManager/Config/App.xcconfig
+
 targets:
   StorageManager:
     type: application
@@ -20,36 +24,112 @@ targets:
       - path: StorageManager
         excludes:
           - "Config/*.xcconfig"
-    configFiles:
-      Debug: StorageManager/Config/App.xcconfig
-      Release: StorageManager/Config/App.xcconfig
+    dependencies:
+      - target: StorageManagerFiles
+      - target: StorageManagerWidgets
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID)
-        TARGETED_DEVICE_FAMILY: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         CODE_SIGN_ENTITLEMENTS: StorageManager/Resources/StorageManager.entitlements
     info:
       path: StorageManager/Resources/Info.plist
       properties:
-        CFBundleDisplayName: Storage Manager
-        UILaunchScreen: {}
-        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
-        UIBackgroundModes: [remote-notification, processing, audio]
-        BGTaskSchedulerPermittedIdentifiers: [$(APP_BUNDLE_ID).move]
-        NSPhotoLibraryUsageDescription: Storage Manager scans your videos to show what uses space, moves the ones you choose to your own cloud, and restores them back to Photos.
-        NSPhotoLibraryAddUsageDescription: Storage Manager saves restored videos back to your Photos library.
-        ITSAppUsesNonExemptEncryption: false
+        SMAppBundleID: $(APP_BUNDLE_ID)
+        SMAppGroupID: $(APP_GROUP_ID)
+        SMKeychainAccessGroup: $(AppIdentifierPrefix)$(APP_BUNDLE_ID).shared
         SMGoogleClientID: $(GOOGLE_CLIENT_ID)
         SMMicrosoftClientID: $(MICROSOFT_CLIENT_ID)
         SMCloudKitContainer: $(CLOUDKIT_CONTAINER)
+        CFBundleDisplayName: Storage Manager
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIBackgroundModes: [remote-notification, processing, audio]
+        BGTaskSchedulerPermittedIdentifiers: [$(APP_BUNDLE_ID).move, $(APP_BUNDLE_ID).automove]
+        CFBundleURLTypes:
+          - CFBundleURLName: $(APP_BUNDLE_ID)
+            CFBundleURLSchemes: [storagemanager]
+        NSPhotoLibraryUsageDescription: Storage Manager scans your videos to show what uses space, moves the ones you choose to your own cloud, and restores them back to Photos.
+        NSPhotoLibraryAddUsageDescription: Storage Manager saves restored videos back to your Photos library.
+        ITSAppUsesNonExemptEncryption: false
     entitlements:
       path: StorageManager/Resources/StorageManager.entitlements
       properties:
         aps-environment: development
         com.apple.developer.icloud-services: [CloudKit]
         com.apple.developer.icloud-container-identifiers: [$(CLOUDKIT_CONTAINER)]
+        com.apple.security.application-groups: [$(APP_GROUP_ID)]
+        keychain-access-groups: [$(AppIdentifierPrefix)$(APP_BUNDLE_ID).shared]
+
+  # "Storage Manager" location in the Files app (read-only, downloads on demand).
+  StorageManagerFiles:
+    type: app-extension
+    platform: iOS
+    sources:
+      - FileProvider
+      - StorageManager/Core
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).files
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_ENTITLEMENTS: FileProvider/StorageManagerFiles.entitlements
+    info:
+      path: FileProvider/Info.plist
+      properties:
+        SMAppBundleID: $(APP_BUNDLE_ID)
+        SMAppGroupID: $(APP_GROUP_ID)
+        SMKeychainAccessGroup: $(AppIdentifierPrefix)$(APP_BUNDLE_ID).shared
+        SMGoogleClientID: $(GOOGLE_CLIENT_ID)
+        SMMicrosoftClientID: $(MICROSOFT_CLIENT_ID)
+        SMCloudKitContainer: $(CLOUDKIT_CONTAINER)
+        CFBundleDisplayName: Storage Manager
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.fileprovider-nonui
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).FileProviderExtension
+          NSExtensionFileProviderSupportsEnumeration: true
+    entitlements:
+      path: FileProvider/StorageManagerFiles.entitlements
+      properties:
+        com.apple.security.application-groups: [$(APP_GROUP_ID)]
+        keychain-access-groups: [$(AppIdentifierPrefix)$(APP_BUNDLE_ID).shared]
+
+  # Home Screen and Lock Screen widgets.
+  StorageManagerWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Widgets
+      - path: StorageManager/Core
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).widgets
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_ENTITLEMENTS: Widgets/StorageManagerWidgets.entitlements
+    info:
+      path: Widgets/Info.plist
+      properties:
+        SMAppBundleID: $(APP_BUNDLE_ID)
+        SMAppGroupID: $(APP_GROUP_ID)
+        SMKeychainAccessGroup: $(AppIdentifierPrefix)$(APP_BUNDLE_ID).shared
+        SMGoogleClientID: $(GOOGLE_CLIENT_ID)
+        SMMicrosoftClientID: $(MICROSOFT_CLIENT_ID)
+        SMCloudKitContainer: $(CLOUDKIT_CONTAINER)
+        CFBundleDisplayName: Storage Manager
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Widgets/StorageManagerWidgets.entitlements
+      properties:
+        com.apple.security.application-groups: [$(APP_GROUP_ID)]
+
   StorageManagerTests:
     type: bundle.unit-test
     platform: iOS
@@ -59,6 +139,7 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
+
 schemes:
   StorageManager:
     build:

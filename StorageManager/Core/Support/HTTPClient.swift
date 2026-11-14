@@ -29,7 +29,8 @@ nonisolated enum NetworkPolicy {
 
     static var allowsCellular: Bool {
         // Wi-Fi only is the default, so a missing value means "no cellular".
-        UserDefaults.standard.object(forKey: wifiOnlyKey) == nil ? false : !UserDefaults.standard.bool(forKey: wifiOnlyKey)
+        let defaults = SharedContainer.defaults
+        return defaults.object(forKey: wifiOnlyKey) == nil ? false : !defaults.bool(forKey: wifiOnlyKey)
     }
 }
 

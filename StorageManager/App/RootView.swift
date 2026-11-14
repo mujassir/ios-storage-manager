@@ -5,11 +5,48 @@ enum AppTab: Hashable {
     case storage, videos, library, clouds, settings
 }
 
+/// Opened from widgets, notifications and the Files app: `storagemanager://videos?filter=large`.
+enum DeepLink: Equatable {
+    case storage, cleanup, library, clouds, settings
+    case videos(VideoFilter?)
+
+    init?(url: URL) {
+        guard url.scheme == AppConfig.urlScheme else { return nil }
+        let filter = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first { $0.name == "filter" }?.value.flatMap(VideoFilter.init(rawValue:))
+        switch url.host() {
+        case "storage", nil: self = .storage
+        case "cleanup": self = .cleanup
+        case "library": self = .library
+        case "clouds": self = .clouds
+        case "settings": self = .settings
+        case "videos": self = .videos(filter)
+        default: return nil
+        }
+    }
+
+    var tab: AppTab {
+        switch self {
+        case .storage, .cleanup: .storage
+        case .library: .library
+        case .clouds: .clouds
+        case .settings: .settings
+        case .videos: .videos
+        }
+    }
+}
+
 struct RootView: View {
+    let refreshExtensions: () -> Void
+
     @Environment(AppSettings.self) private var settings
+    @Environment(LibraryScanner.self) private var scanner
+    @Environment(TransferEngine.self) private var transfers
     @Environment(AccountManager.self) private var accounts
     @Environment(\.modelContext) private var context
     @Query(sort: \LinkedAccount.linkedAt) private var linkedAccounts: [LinkedAccount]
+    @Query private var movedVideos: [MovedVideo]
+    @AppStorage("videos.filter") private var videoFilter: VideoFilter = .all
 
     @State private var selectedTab: AppTab = .storage
     @State private var welcomeBackDismissed = false
@@ -45,7 +82,20 @@ struct RootView: View {
                 SettingsView(iCloudStatus: iCloudStatus)
             }
         }
+        // Tab bar on iPhone, sidebar on iPad and Mac.
+        .tabViewStyle(.sidebarAdaptable)
         .tabBarMinimizeBehavior(.onScrollDown)
+        .onOpenURL { url in
+            guard let link = DeepLink(url: url) else { return }
+            if case .videos(let filter?) = link { videoFilter = filter }
+            selectedTab = link.tab
+        }
+        // Keep the Files app and widgets in step with the library.
+        .onChange(of: movedVideos.count) { refreshExtensions() }
+        .onChange(of: linkedAccounts.count) { refreshExtensions() }
+        .onChange(of: scanner.lastScan) { refreshExtensions() }
+        .onChange(of: transfers.isRunning) { refreshExtensions() }
+        .onChange(of: accounts.connectionRevision) { refreshExtensions() }
         .sheet(isPresented: welcomeBackBinding) {
             WelcomeBackView(accounts: accountsNeedingReconnect) {
                 welcomeBackDismissed = true
@@ -53,6 +103,7 @@ struct RootView: View {
         }
         .task {
             accounts.removeDuplicateAccounts(context: context)
+            refreshExtensions()
             iCloudStatus = await ICloudStatus.check()
         }
     }

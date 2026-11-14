@@ -34,6 +34,12 @@ final class MovedVideo {
     var movedAt: Date = Date.now
     /// Whether the original was removed from the phone after a verified upload.
     var deletedFromDevice: Bool = false
+    /// The cloud reported the same size and checksum as the original.
+    var isVerified: Bool = false
+    /// Public "anyone with the link" URL, if the user shared this video.
+    var shareURLString: String = ""
+    /// Provider permission ID backing the share link, used to stop sharing.
+    var sharePermissionID: String = ""
 
     /// Small JPEG (~30 KB) so the gallery works on a new device before any account is reconnected.
     @Attribute(.externalStorage) var thumbnailJPEG: Data?
@@ -86,6 +92,11 @@ final class MovedVideo {
     }
 
     var displayTitle: String { title.isEmpty ? originalFilename : title }
+
+    var shareURL: URL? { shareURLString.isEmpty ? nil : URL(string: shareURLString) }
+
+    /// Verified in the cloud but still taking space on this phone.
+    var isPendingCleanup: Bool { isVerified && !deletedFromDevice && !originalAssetIdentifier.isEmpty }
 
     var remoteFile: RemoteFile {
         RemoteFile(id: remoteFileID, path: remotePath, sizeBytes: sizeBytes, checksum: checksum)

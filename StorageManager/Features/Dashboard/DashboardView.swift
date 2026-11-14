@@ -8,9 +8,25 @@ struct DashboardView: View {
     @Environment(LibraryScanner.self) private var scanner
     @Environment(AccountManager.self) private var accounts
     @Environment(TransferEngine.self) private var transfers
+    @Environment(AutoMoveService.self) private var autoMove
+    @Environment(ProStore.self) private var store
+    @Environment(\.modelContext) private var context
     @Query private var linkedAccounts: [LinkedAccount]
     @Query private var movedVideos: [MovedVideo]
     @AppStorage("videos.filter") private var videoFilter: VideoFilter = .all
+    @State private var isFreeing = false
+    @State private var freedMessage: String?
+    @State private var showProgress = false
+
+    /// Verified in the cloud but still on this phone (auto-move, or deletion wasn't confirmed).
+    private var pendingCleanup: [MovedVideo] {
+        let onPhone = Set(scanner.videos.map(\.id))
+        return movedVideos.filter { $0.isPendingCleanup && onPhone.contains($0.originalAssetIdentifier) }
+    }
+
+    private var autoMovePlan: [AutoMoveRule.Destination: [VideoAsset]] {
+        store.isPro && autoMove.hasEnabledRules && !transfers.isRunning ? autoMove.plan(for: scanner.videos) : [:]
+    }
 
     var body: some View {
         NavigationStack {
@@ -25,6 +41,12 @@ struct DashboardView: View {
                     if transfers.isRunning {
                         activeTransferCard
                     }
+                    if !pendingCleanup.isEmpty || freedMessage != nil {
+                        cleanupCard
+                    }
+                    if !autoMovePlan.isEmpty {
+                        autoMoveCard
+                    }
                     phoneCard
                     cloudCard
                     suggestionsCard
@@ -35,6 +57,7 @@ struct DashboardView: View {
             .navigationTitle("Storage")
             .refreshable { await refresh() }
             .task { if scanner.lastScan == nil { await refresh() } }
+            .sheet(isPresented: $showProgress) { TransferProgressView() }
         }
     }
 
@@ -44,6 +67,60 @@ struct DashboardView: View {
     }
 
     // MARK: Cards
+
+    private var cleanupCard: some View {
+        let bytes = pendingCleanup.reduce(0) { $0 + $1.sizeBytes }
+        return Card {
+            Label("Ready to free", systemImage: "sparkles").font(.headline).foregroundStyle(.green)
+            if let freedMessage, pendingCleanup.isEmpty {
+                Text(freedMessage)
+                Text("To free the space now, empty Photos › Recently Deleted.").font(.footnote).foregroundStyle(.secondary)
+            } else {
+                Text("\(pendingCleanup.count) video\(pendingCleanup.count == 1 ? " is" : "s are") safely in your cloud and verified, but still on this iPhone.")
+                    .foregroundStyle(.secondary)
+                Button {
+                    Task { await freeUp() }
+                } label: {
+                    HStack {
+                        Text("Free \(ByteFormatting.string(bytes))")
+                        if isFreeing { ProgressView() }
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glassProminent)
+                .disabled(isFreeing)
+            }
+        }
+    }
+
+    private var autoMoveCard: some View {
+        let videos = autoMovePlan.values.flatMap { $0 }
+        return Card {
+            Label("Auto-move", systemImage: "wand.and.stars").font(.headline)
+            Text("Your rules match \(videos.count) video\(videos.count == 1 ? "" : "s") (\(ByteFormatting.string(videos.reduce(0) { $0 + $1.sizeBytes }))). They'll move overnight while charging, or you can move them now.")
+                .foregroundStyle(.secondary)
+            Button("Move Now") {
+                for (destination, batch) in autoMovePlan.sorted(by: { $0.value.count > $1.value.count }).prefix(1) {
+                    transfers.start(batch, destination: AutoMoveService.engineDestination(destination), deleteAfterMove: true, context: context)
+                }
+                showProgress = true
+            }
+            .buttonStyle(.glass)
+        }
+    }
+
+    private func freeUp() async {
+        isFreeing = true
+        defer { isFreeing = false }
+        let bytes = pendingCleanup.reduce(0) { $0 + $1.sizeBytes }
+        do {
+            _ = try await transfers.freeUpVerifiedOriginals(context: context, onDevice: scanner.videos)
+            freedMessage = "Deleted \(ByteFormatting.string(bytes)) of videos that are safe in your cloud."
+            await scanner.scan()
+        } catch {
+            // The user declined the iOS confirmation; nothing changed.
+        }
+    }
 
     private var phoneCard: some View {
         Card {

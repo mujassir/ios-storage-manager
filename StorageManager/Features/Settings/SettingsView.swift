@@ -7,16 +7,50 @@ struct SettingsView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(VideoInsightService.self) private var insights
     @Environment(AccountManager.self) private var accounts
+    @Environment(ProStore.self) private var store
+    @Environment(AutoMoveService.self) private var autoMove
     @Environment(\.modelContext) private var context
     @Query private var linkedAccounts: [LinkedAccount]
 
     @State private var rebuildMessage: String?
     @State private var isRebuilding = false
+    @State private var showPaywall = false
 
     var body: some View {
         @Bindable var settings = settings
         NavigationStack {
             Form {
+                Section {
+                    if store.isPro {
+                        Label("Storage Manager Pro is active", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
+                    } else {
+                        Button {
+                            showPaywall = true
+                        } label: {
+                            Label("Get Storage Manager Pro", systemImage: "wand.and.stars")
+                        }
+                    }
+                    NavigationLink {
+                        AutoMoveRulesView()
+                    } label: {
+                        LabeledContent("Auto-Move Rules", value: autoMove.hasEnabledRules ? "On" : "Off")
+                    }
+                    Button("Restore Purchases") { Task { await store.restorePurchases() } }
+                } header: {
+                    Text("Pro")
+                } footer: {
+                    Text("Free: move up to \(ProStore.freeBatchLimit) videos at a time. Pro: unlimited moves and automatic overnight moves.")
+                }
+
+                Section {
+                    Label("Open the Files app › Browse › Storage Manager to see moved videos in folders by year and month. They download when you open them.", systemImage: "folder")
+                        .font(.footnote)
+                    Label("Add the Storage widget to your Home Screen or Lock Screen to see free space at a glance.", systemImage: "square.grid.2x2")
+                        .font(.footnote)
+                } header: {
+                    Text("Files & Widgets")
+                }
+
                 Section {
                     Toggle("Upload on Wi-Fi only", isOn: $settings.wifiOnly)
                     Toggle("Pause in Low Power Mode", isOn: $settings.pauseOnLowPower)
@@ -62,6 +96,7 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .sheet(isPresented: $showPaywall) { ProPaywallView() }
         }
     }
 

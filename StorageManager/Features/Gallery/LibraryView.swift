@@ -182,6 +182,15 @@ struct LibraryView: View {
         } else {
             NavigationLink(value: video) { content }
                 .buttonStyle(.plain)
+                .hoverEffect(.lift)
+                .contextMenu {
+                    Button("Restore to Photos", systemImage: "square.and.arrow.down") {
+                        Task { await restores.restore([video], deleteCloudCopy: false, context: context) }
+                    }
+                    if let url = video.shareURL {
+                        ShareLink(item: url) { Label("Share Link", systemImage: "link") }
+                    }
+                }
         }
     }
 

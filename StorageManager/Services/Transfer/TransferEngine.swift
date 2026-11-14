@@ -87,6 +87,7 @@ final class TransferEngine {
     @ObservationIgnored private let settings: AppSettings
     @ObservationIgnored private let background: ContinuedProcessingCoordinator
     @ObservationIgnored private var runTask: Task<Void, Never>?
+    @ObservationIgnored private var reportsBackgroundProgress = true
 
     init(photos: PhotoLibraryService, accounts: AccountManager, insights: VideoInsightService,
          settings: AppSettings, background: ContinuedProcessingCoordinator) {
@@ -107,11 +108,46 @@ final class TransferEngine {
 
     func start(_ videos: [VideoAsset], destination: Destination, deleteAfterMove: Bool, context: ModelContext) {
         guard !isRunning, !videos.isEmpty else { return }
+        prepare(videos)
+        runTask = Task { [weak self] in
+            await self?.run(destination: destination, deleteAfterMove: deleteAfterMove, showsSystemProgress: true, context: context)
+        }
+    }
+
+    /// Runs a batch to completion and returns its summary. Used by auto-move rules in a background task,
+    /// where originals are not deleted (that needs the user's confirmation in the foreground).
+    func runToCompletion(_ videos: [VideoAsset], destination: Destination, context: ModelContext) async -> Summary? {
+        guard !isRunning, !videos.isEmpty else { return nil }
+        prepare(videos)
+        let task = Task { [weak self] in
+            await self?.run(destination: destination, deleteAfterMove: false, showsSystemProgress: false, context: context)
+        }
+        runTask = task
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        return summary
+    }
+
+    private func prepare(_ videos: [VideoAsset]) {
         jobs = videos.map { Job(video: $0) }
         summary = nil
         isRunning = true
-        runTask = Task { [weak self] in
-            await self?.run(destination: destination, deleteAfterMove: deleteAfterMove, context: context)
+    }
+
+    /// Deletes originals that are already verified in the cloud but still on the phone
+    /// (from auto-move, or a move where deletion wasn't confirmed). One iOS confirmation for all.
+    func freeUpVerifiedOriginals(context: ModelContext, onDevice videos: [VideoAsset]) async throws -> Int64 {
+        let local = Dictionary(videos.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let pending = ((try? context.fetch(FetchDescriptor<MovedVideo>())) ?? []).filter { $0.isPendingCleanup && local[$0.originalAssetIdentifier] != nil }
+        guard !pending.isEmpty else { return 0 }
+        try await photos.deleteVideos(withIdentifiers: pending.map(\.originalAssetIdentifier))
+        for entry in pending { entry.deletedFromDevice = true }
+        try context.save()
+        return pending.reduce(0) { total, entry in
+            total + ((local[entry.originalAssetIdentifier]?.isLocallyAvailable ?? false) ? entry.sizeBytes : 0)
         }
     }
 
@@ -128,11 +164,21 @@ final class TransferEngine {
 
     // MARK: Batch
 
-    private func run(destination: Destination, deleteAfterMove: Bool, context: ModelContext) async {
+    private func run(destination: Destination, deleteAfterMove: Bool, showsSystemProgress: Bool, context: ModelContext) async {
         let count = jobs.count
-        background.begin(title: "Moving \(count) video\(count == 1 ? "" : "s")", subtitle: "Starting…") { [weak self] in
-            self?.cancel()
+        reportsBackgroundProgress = showsSystemProgress
+        if showsSystemProgress {
+            background.begin(title: "Moving \(count) video\(count == 1 ? "" : "s")", subtitle: "Starting…") { [weak self] in
+                self?.cancel()
+            }
         }
+        // Videos already verified in the cloud are not uploaded again.
+        let alreadyInCloud = Dictionary(
+            ((try? context.fetch(FetchDescriptor<MovedVideo>())) ?? [])
+                .filter { $0.isVerified && !$0.originalAssetIdentifier.isEmpty }
+                .map { ($0.originalAssetIdentifier, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
 
         let linked = (try? context.fetch(FetchDescriptor<LinkedAccount>())) ?? []
         let connected = linked.filter { accounts.isConnected($0) }
@@ -153,6 +199,12 @@ final class TransferEngine {
                 continue
             }
             let video = jobs[index].video
+            if let existing = alreadyInCloud[video.id] {
+                jobs[index].account = existing.accountKey
+                movedEntries.append(existing)
+                jobs[index].state = .moved
+                continue
+            }
             guard let key = allocator.allocate(sizeBytes: video.sizeBytes, preferred: preferred) else {
                 jobs[index].state = .failed(connected.isEmpty ? "Connect a cloud account first." : CloudProviderError.notEnoughSpace.localizedDescription)
                 continue
@@ -211,7 +263,7 @@ final class TransferEngine {
 
         summary = result
         isRunning = false
-        background.finish(success: result.failedCount == 0)
+        if showsSystemProgress { background.finish(success: result.failedCount == 0) }
     }
 
     // MARK: One video
@@ -290,6 +342,7 @@ final class TransferEngine {
             checksum: remote.checksum.isEmpty ? localChecksum : remote.checksum,
             thumbnailJPEG: thumbnail
         )
+        entry.isVerified = verified
         context.insert(entry)
         try context.save()
 
@@ -313,6 +366,7 @@ final class TransferEngine {
     }
 
     private func reportBackgroundProgress() {
+        guard reportsBackgroundProgress else { return }
         let subtitle = "\(finishedCount) of \(jobs.count) · \(ByteFormatting.string(completedBytes)) of \(ByteFormatting.string(totalBytes))"
         background.update(fractionCompleted: fractionCompleted, subtitle: subtitle)
     }
